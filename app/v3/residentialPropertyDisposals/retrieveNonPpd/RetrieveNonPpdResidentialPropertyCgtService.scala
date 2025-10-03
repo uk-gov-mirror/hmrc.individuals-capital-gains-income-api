@@ -16,11 +16,13 @@
 
 package v3.residentialPropertyDisposals.retrieveNonPpd
 
-import cats.implicits.toBifunctorOps
 import common.errors.SourceFormatError
 import shared.controllers.RequestContext
 import shared.models.errors.{MtdError, *}
+import shared.models.outcomes.ResponseWrapper
 import shared.services.{BaseService, ServiceOutcome}
+import v3.residentialPropertyDisposals.retrieveNonPpd.def1.model.response.Def1_RetrieveNonPpdResidentialPropertyCgtResponse
+import v3.residentialPropertyDisposals.retrieveNonPpd.def2.model.response.Def2_RetrieveNonPpdResidentialPropertyCgtResponse
 import v3.residentialPropertyDisposals.retrieveNonPpd.model.request.RetrieveNonPpdResidentialPropertyCgtRequestData
 import v3.residentialPropertyDisposals.retrieveNonPpd.model.response.RetrieveNonPpdResidentialPropertyCgtResponse
 
@@ -34,9 +36,21 @@ class RetrieveNonPpdResidentialPropertyCgtService @Inject() (connector: Retrieve
       ctx: RequestContext,
       ec: ExecutionContext): Future[ServiceOutcome[RetrieveNonPpdResidentialPropertyCgtResponse]] = {
 
-    connector.retrieve(request).map(_.leftMap(mapDownstreamErrors(downstreamErrorMap)))
-
+    connector.retrieve(request).map {
+      case Right(wrapper) => validateResponse(wrapper)
+      case Left(wrapper)  => Left(mapDownstreamErrors(downstreamErrorMap)(wrapper))
+    }
   }
+
+  private def validateResponse(wrapper: ResponseWrapper[RetrieveNonPpdResidentialPropertyCgtResponse])
+      : Either[ErrorWrapper, ResponseWrapper[RetrieveNonPpdResidentialPropertyCgtResponse]] =
+    wrapper.responseData match {
+      case def1: Def1_RetrieveNonPpdResidentialPropertyCgtResponse if def1.customerAddedDisposals.isEmpty =>
+        Left(ErrorWrapper(wrapper.correlationId, NotFoundError))
+      case def2: Def2_RetrieveNonPpdResidentialPropertyCgtResponse if def2.customerAddedDisposals.isEmpty =>
+        Left(ErrorWrapper(wrapper.correlationId, NotFoundError))
+      case _ => Right(wrapper)
+    }
 
   private val downstreamErrorMap: Map[String, MtdError] = {
     Map(
